@@ -44,7 +44,7 @@ export default function Home() {
             <a href="/projects" style={{ color: '#00b4ff', textDecoration: 'none', fontWeight: 600 }}>Project Hub</a>
             <a href="#" style={{ color: '#8892a8', textDecoration: 'none' }}>Tutorials</a>
             <a href="#" style={{ color: '#8892a8', textDecoration: 'none' }}>Assam Connect</a>
-            <a href="#" style={{ color: '#8892a8', textDecoration: 'none' }}>Forum</a>
+            <a href="/forum" style={{ color: '#8892a8', textDecoration: 'none' }}>Forum</a>
           </div>
 
           {/* Desktop CTA */}
@@ -88,7 +88,7 @@ export default function Home() {
             <a href="/projects" style={{ color: '#00b4ff', textDecoration: 'none', padding: '12px 4px', fontSize: '15px', borderBottom: '1px solid #1a1e2a', fontWeight: 600 }}>Project Hub</a>
             <a href="#" style={{ color: '#8892a8', textDecoration: 'none', padding: '12px 4px', fontSize: '15px', borderBottom: '1px solid #1a1e2a' }}>Tutorials</a>
             <a href="#" style={{ color: '#8892a8', textDecoration: 'none', padding: '12px 4px', fontSize: '15px', borderBottom: '1px solid #1a1e2a' }}>Assam Connect</a>
-            <a href="#" style={{ color: '#8892a8', textDecoration: 'none', padding: '12px 4px', fontSize: '15px', borderBottom: '1px solid #1a1e2a' }}>Forum</a>
+            <a href="/forum" style={{ color: '#8892a8', textDecoration: 'none', padding: '12px 4px', fontSize: '15px', borderBottom: '1px solid #1a1e2a' }}>Forum</a>
             <a href="/register" style={{
   backgroundColor: '#00b4ff', color: '#000',
   fontWeight: 700, padding: '8px 16px',
