@@ -1,14 +1,61 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../components/AuthProvider'
+import { db } from '../lib/firebase'
+import { collection, getDocs, orderBy, query, limit } from 'firebase/firestore'
 
 function initials(name) {
-  return name ? name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2) : '?'
+  if (!name) return '?'
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+const levelStyle = {
+  Beginner:     { bg:'rgba(45,212,160,.1)',  color:'#2dd4a0' },
+  Intermediate: { bg:'rgba(240,165,0,.1)',   color:'#f0a500' },
+  Advanced:     { bg:'rgba(255,100,100,.1)', color:'#ff6464' },
+}
+
+const CAT_EMOJI = {
+  Electrical:'⚡', Mechanical:'⚙️', Civil:'🏗️', Coding:'💻',
+  Biology:'🧬', Robotics:'🤖', IoT:'📡', 'Renewable Energy':'☀️', Other:'🔬'
 }
 
 export default function Home() {
   const { user, loading, logout } = useAuth()
   const [menuOpen, setMenuOpen]   = useState(false)
+  const [projects, setProjects]   = useState([])
+  const [makers, setMakers]   = useState([])
+const [towns, setTowns]     = useState(0)
+  const [projLoading, setProjLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const q = query(collection(db, 'projects'), orderBy('createdAt', 'desc'), limit(3))
+        const snap = await getDocs(q)
+        setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      } catch(e) { console.error(e) }
+      setProjLoading(false)
+    }
+    fetchProjects()
+  }, [])
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [projSnap, usersSnap] = await Promise.all([
+          getDocs(query(collection(db, 'projects'), orderBy('createdAt', 'desc'), limit(3))),
+          getDocs(collection(db, 'users')),
+        ])
+        setProjects(projSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+        const users = usersSnap.docs.map(d => d.data())
+        setMakers(users)
+        const uniqueTowns = new Set(users.map(u => u.town).filter(Boolean))
+        setTowns(uniqueTowns.size)
+      } catch(e) { console.error(e) }
+      setProjLoading(false)
+    }
+    fetchData()
+  }, [])
 
   return (
     <main style={{ backgroundColor:'#0d0f14', minHeight:'100vh', fontFamily:'Inter,system-ui,sans-serif', color:'#dde1f0', overflowX:'hidden' }}>
@@ -28,40 +75,35 @@ export default function Home() {
           <a href="/" style={{ fontWeight:800, fontSize:'17px', color:'#dde1f0', flexShrink:0 }}>
             <span style={{ color:'#4a9eff' }}>Assam</span> Innovates
           </a>
-
           <div className="desk-nav" style={{ display:'flex', gap:'24px', fontSize:'14px', color:'#7a82a0', flex:1, justifyContent:'center' }}>
             {[['/', 'Home'],['/projects','Projects'],['/forum','Forum']].map(([href,label]) => (
               <a key={label} href={href} className="nav-link" style={{ color:'#7a82a0', transition:'color .15s' }}>{label}</a>
             ))}
           </div>
-
-          {/* Auth nav — desktop */}
           <div className="desk-nav" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-            {loading ? null : user ? (
+            {!loading && (user ? (
               <>
-                <a href="/profile" style={{ display:'flex', alignItems:'center', gap:'8px', color:'#dde1f0', fontSize:'13px' }}>
-                  <div style={{ width:'30px', height:'30px', borderRadius:'50%', background:'linear-gradient(135deg,#4a9eff,#2dd4a0)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:700, color:'#fff' }}>
-                    {user.photoURL ? <img src={user.photoURL} alt="" style={{ width:'30px', height:'30px', borderRadius:'50%', objectFit:'cover' }}/> : initials(user.displayName)}
+                <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px' }}>+ Submit Project</a>
+                <a href="/profile" style={{ display:'flex', alignItems:'center', gap:'7px', color:'#dde1f0', fontSize:'13px' }}>
+                  <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:'linear-gradient(135deg,#4a9eff,#2dd4a0)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px', fontWeight:700, color:'#fff', overflow:'hidden' }}>
+                    {user.photoURL ? <img src={user.photoURL} alt="" style={{ width:'28px', height:'28px', objectFit:'cover' }}/> : initials(user.displayName)}
                   </div>
-                  <span>{user.displayName?.split(' ')[0] || 'Profile'}</span>
+                  {user.displayName?.split(' ')[0] || 'Profile'}
                 </a>
-                <button onClick={logout} style={{ backgroundColor:'transparent', color:'#7a82a0', fontSize:'13px', padding:'7px 14px', borderRadius:'6px', border:'1px solid #2a2f4a', cursor:'pointer' }}>Sign Out</button>
+                <button onClick={logout} style={{ backgroundColor:'transparent', color:'#7a82a0', fontSize:'13px', padding:'7px 12px', borderRadius:'6px', border:'1px solid #2a2f4a', cursor:'pointer' }}>Sign Out</button>
               </>
             ) : (
               <>
-                <a href="/login" style={{ color:'#7a82a0', fontSize:'13px', padding:'7px 14px', borderRadius:'6px', border:'1px solid #2a2f4a' }}>Log In</a>
+                <a href="/login"  style={{ color:'#7a82a0', fontSize:'13px', padding:'7px 14px', borderRadius:'6px', border:'1px solid #2a2f4a' }}>Log In</a>
                 <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'8px 18px', borderRadius:'7px', fontSize:'13px' }}>Sign Up Free</a>
               </>
-            )}
+            ))}
           </div>
-
           <button className="mob-ham" onClick={() => setMenuOpen(!menuOpen)}
             style={{ display:'none', background:'none', border:'1px solid #2a2f4a', borderRadius:'6px', padding:'6px 10px', cursor:'pointer', color:'#dde1f0', fontSize:'18px', alignItems:'center' }}>
             {menuOpen ? '✕' : '☰'}
           </button>
         </div>
-
-        {/* Mobile menu */}
         {menuOpen && (
           <div className="mob-menu" style={{ borderTop:'1px solid #2a2f4a', padding:'12px 0', display:'flex', flexDirection:'column' }}>
             {[['/', 'Home'],['/projects','Projects'],['/forum','Forum']].map(([href,label]) => (
@@ -69,12 +111,13 @@ export default function Home() {
             ))}
             {user ? (
               <>
+                <a href="/submit"  style={{ color:'#2dd4a0', padding:'11px 4px', fontSize:'15px', borderBottom:'1px solid #20243a' }}>+ Submit Project</a>
                 <a href="/profile" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'15px', borderBottom:'1px solid #20243a' }}>My Profile</a>
                 <button onClick={logout} style={{ backgroundColor:'transparent', color:'#7a82a0', padding:'11px 0', fontSize:'15px', border:'none', textAlign:'left', cursor:'pointer' }}>Sign Out</button>
               </>
             ) : (
               <>
-                <a href="/login" style={{ color:'#7a82a0', padding:'11px 4px', fontSize:'15px', borderBottom:'1px solid #20243a' }}>Log In</a>
+                <a href="/login"  style={{ color:'#7a82a0', padding:'11px 4px', fontSize:'15px', borderBottom:'1px solid #20243a' }}>Log In</a>
                 <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'12px', borderRadius:'7px', marginTop:'12px', textAlign:'center', fontSize:'14px' }}>Sign Up Free</a>
               </>
             )}
@@ -88,7 +131,7 @@ export default function Home() {
           <span style={{ width:'6px', height:'6px', backgroundColor:'#2dd4a0', borderRadius:'50%', display:'inline-block' }}></span>
           Built in Assam, for the world
         </div>
-        <h1 style={{ fontSize:'clamp(32px,8vw,60px)', fontWeight:900, lineHeight:1.08, letterSpacing:'-1.5px', marginBottom:'18px', color:'#dde1f0' }}>
+        <h1 style={{ fontSize:'clamp(32px,8vw,60px)', fontWeight:900, lineHeight:1.08, letterSpacing:'-1.5px', marginBottom:'18px' }}>
           Where <span style={{ color:'#4a9eff' }}>Electrons</span> Meet<br />
           <span style={{ color:'#2dd4a0' }}>Assam&apos;s</span> Innovators
         </h1>
@@ -96,54 +139,42 @@ export default function Home() {
           A hands-on electronics community for curious kids, ambitious students, and seasoned engineers — rooted in the Brahmaputra Valley, connected to the world.
         </p>
         <div style={{ display:'flex', gap:'12px', justifyContent:'center', flexWrap:'wrap' }}>
-          <a href="/projects" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)', display:'inline-block' }}>
+          <a href="/projects" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)' }}>
             Explore Projects
           </a>
-          {!user && (
-            <a href="/signup" style={{ backgroundColor:'transparent', color:'#dde1f0', fontWeight:600, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)', border:'1px solid #2a2f4a', display:'inline-block' }}>
-              Join the Community
+          {user ? (
+            <a href="/submit" style={{ backgroundColor:'transparent', color:'#2dd4a0', fontWeight:600, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)', border:'1px solid rgba(45,212,160,.3)' }}>
+              + Submit Your Project
             </a>
-          )}
-          {user && (
-            <a href="/profile" style={{ backgroundColor:'transparent', color:'#2dd4a0', fontWeight:600, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)', border:'1px solid rgba(45,212,160,.3)', display:'inline-block' }}>
-              My Profile →
+          ) : (
+            <a href="/signup" style={{ backgroundColor:'transparent', color:'#dde1f0', fontWeight:600, padding:'13px 28px', borderRadius:'8px', fontSize:'clamp(14px,4vw,15px)', border:'1px solid #2a2f4a' }}>
+              Join the Community
             </a>
           )}
         </div>
       </section>
 
       {/* STATS */}
-      <section className="stats-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', backgroundColor:'#1a1d2e', borderBottom:'1px solid #2a2f4a' }}>
-        {[['240+','Active Makers'],['58','Towns in Assam'],['180+','Published Projects'],['4','Learning Paths']].map(([num,label],i) => (
-          <div key={label} style={{ textAlign:'center', padding:'clamp(16px,4vw,24px) 12px', borderRight:i<3?'1px solid #2a2f4a':'none' }}>
-            <div style={{ fontSize:'clamp(20px,5vw,28px)', fontWeight:800, color:'#4a9eff' }}>{num}</div>
-            <div style={{ fontSize:'12px', color:'#7a82a0', marginTop:'4px' }}>{label}</div>
-          </div>
-        ))}
-      </section>
+ {/* STATS — live counts from Firebase */}
+<section className="stats-grid" style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', backgroundColor:'#1a1d2e', borderBottom:'1px solid #2a2f4a' }}>
+  {[
+    { num: makers.length   || '...', label:'Active Makers',      tab:'makers'   },
+    { num: towns           || '...', label:'Towns in Assam',     tab:'towns'    },
+    { num: projects.length || '...', label:'Published Projects', tab:'projects' },
+    { num: 4,                        label:'Learning Paths',     tab:'paths'    },
+  ].map(({ num, label, tab }, i) => (
+    <a key={label} href={`/community?tab=${tab}`}
+      style={{ textAlign:'center', padding:'clamp(16px,4vw,24px) 12px', borderRight:i<3?'1px solid #2a2f4a':'none', textDecoration:'none', display:'block', cursor:'pointer' }}
+      onMouseEnter={e=>e.currentTarget.style.backgroundColor='#20243a'}
+      onMouseLeave={e=>e.currentTarget.style.backgroundColor='transparent'}>
+      <div style={{ fontSize:'clamp(20px,5vw,28px)', fontWeight:800, color:'#4a9eff' }}>{num}</div>
+      <div style={{ fontSize:'12px', color:'#7a82a0', marginTop:'4px' }}>{label}</div>
+      <div style={{ fontSize:'10px', color:'#4a5070', marginTop:'3px' }}>View all →</div>
+    </a>
+  ))}
+</section>
 
-      {/* LEARNING PATHS */}
-      <section style={{ padding:'clamp(40px,8vw,72px) 20px', maxWidth:'1100px', margin:'0 auto' }}>
-        <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'2px', color:'#4a9eff', textTransform:'uppercase', marginBottom:'8px' }}>Learning Paths</div>
-        <h2 style={{ fontSize:'clamp(22px,5vw,32px)', fontWeight:800, letterSpacing:'-.5px', marginBottom:'10px' }}>The Path of the Maker</h2>
-        <p style={{ color:'#7a82a0', fontSize:'15px', marginBottom:'32px', lineHeight:1.6 }}>Every innovator starts somewhere. Pick your path.</p>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap:'14px' }}>
-          {[
-            { name:'Spark',     tag:'Kids',         icon:'⚡', acc:'#f0a500', tagBg:'rgba(240,165,0,.1)'   },
-            { name:'Current',   tag:'Students',     icon:'🔬', acc:'#2dd4a0', tagBg:'rgba(45,212,160,.1)'  },
-            { name:'Power',     tag:'Pros',         icon:'⚙️', acc:'#4a9eff', tagBg:'rgba(74,158,255,.1)'  },
-            { name:'Lab Notes', tag:'Science Blog',  icon:'🧪', acc:'#a78bfa', tagBg:'rgba(167,139,250,.1)' },
-          ].map(p => (
-            <a key={p.name} href="/projects" className="path-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderTop:`3px solid ${p.acc}`, borderRadius:'10px', padding:'20px', display:'block', transition:'border-color .2s' }}>
-              <div style={{ fontSize:'28px', marginBottom:'10px' }}>{p.icon}</div>
-              <div style={{ fontWeight:700, fontSize:'16px', marginBottom:'6px' }}>{p.name}</div>
-              <span style={{ fontSize:'11px', fontWeight:600, padding:'3px 9px', borderRadius:'4px', backgroundColor:p.tagBg, color:p.acc }}>{p.tag}</span>
-            </a>
-          ))}
-        </div>
-      </section>
-
-      {/* FEATURED PROJECTS */}
+      {/* LIVE PROJECTS FROM FIREBASE */}
       <section style={{ padding:'clamp(40px,8vw,72px) 20px', backgroundColor:'#13151f', borderTop:'1px solid #2a2f4a' }}>
         <div style={{ maxWidth:'1100px', margin:'0 auto' }}>
           <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'2px', color:'#4a9eff', textTransform:'uppercase', marginBottom:'8px' }}>Project Hub</div>
@@ -151,30 +182,50 @@ export default function Home() {
             <h2 style={{ fontSize:'clamp(22px,5vw,32px)', fontWeight:800 }}>What Makers Are Building</h2>
             <a href="/projects" style={{ fontSize:'13px', color:'#4a9eff', fontWeight:600 }}>View all →</a>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,280px),1fr))', gap:'16px' }}>
-            {[
-              { emoji:'🌊', title:'Brahmaputra Flood Alert System', level:'Intermediate', topic:'IoT',      author:'Rupam B',  town:'Jorhat',    stars:47  },
-              { emoji:'🍃', title:'Tea Garden Automation PCB',      level:'Advanced',     topic:'Renewable', author:'Priya D',  town:'Dibrugarh', stars:83  },
-              { emoji:'🤖', title:'Line-Following Robot Kit',       level:'Beginner',     topic:'Robotics',  author:'Ananya M', town:'Guwahati',  stars:120 },
-            ].map(p => {
-              const lc = p.level==='Beginner'?{bg:'rgba(45,212,160,.1)',c:'#2dd4a0'}:p.level==='Intermediate'?{bg:'rgba(240,165,0,.1)',c:'#f0a500'}:{bg:'rgba(255,100,100,.1)',c:'#ff6464'}
-              return (
-                <a key={p.title} href="/projects" className="proj-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', overflow:'hidden', display:'block', transition:'all .15s' }}>
-                  <div style={{ height:'90px', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'40px', borderBottom:'1px solid #2a2f4a' }}>{p.emoji}</div>
-                  <div style={{ padding:'14px' }}>
-                    <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
-                      <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'4px', backgroundColor:lc.bg, color:lc.c }}>{p.level}</span>
-                      <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'4px', backgroundColor:'rgba(74,158,255,.1)', color:'#4a9eff' }}>{p.topic}</span>
+
+          {projLoading ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'#7a82a0' }}>Loading projects...</div>
+          ) : projects.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'48px 20px', backgroundColor:'#1a1d2e', borderRadius:'12px', border:'1px solid #2a2f4a' }}>
+              <div style={{ fontSize:'36px', marginBottom:'12px' }}>🚀</div>
+              <div style={{ fontSize:'16px', fontWeight:700, marginBottom:'8px' }}>No projects yet — be the first!</div>
+              <p style={{ color:'#7a82a0', fontSize:'14px', marginBottom:'20px' }}>Submit your idea or build and inspire the community.</p>
+              <a href={user ? '/submit' : '/signup'} style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'11px 24px', borderRadius:'7px', fontSize:'14px' }}>
+                {user ? 'Submit First Project →' : 'Sign Up to Submit →'}
+              </a>
+            </div>
+          ) : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,280px),1fr))', gap:'16px' }}>
+                {projects.map(p => (
+                  <a key={p.id} href={`/projects/${p.id}`} className="proj-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', overflow:'hidden', display:'block', transition:'all .15s' }}>
+                    <div style={{ height:'90px', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', borderBottom:'1px solid #2a2f4a' }}>
+                      {CAT_EMOJI[p.category] || '🔬'}
                     </div>
-                    <div style={{ fontWeight:700, fontSize:'14px', marginBottom:'10px', lineHeight:1.4 }}>{p.title}</div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#7a82a0', paddingTop:'10px', borderTop:'1px solid #2a2f4a' }}>
-                      <span>{p.author}, {p.town}</span><span>⭐ {p.stars}</span>
+                    <div style={{ padding:'14px' }}>
+                      <div style={{ display:'flex', gap:'6px', marginBottom:'8px', flexWrap:'wrap' }}>
+                        {p.level    && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'4px', backgroundColor:levelStyle[p.level]?.bg, color:levelStyle[p.level]?.color }}>{p.level}</span>}
+                        {p.category && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'4px', backgroundColor:'rgba(74,158,255,.1)', color:'#4a9eff' }}>{p.category}</span>}
+                      </div>
+                      <div style={{ fontWeight:700, fontSize:'14px', marginBottom:'6px', lineHeight:1.4 }}>{p.title}</div>
+                      <div style={{ fontSize:'12px', color:'#7a82a0', lineHeight:1.5, marginBottom:'10px' }}>
+                        {p.description?.length > 80 ? p.description.slice(0,80)+'...' : p.description}
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#7a82a0', paddingTop:'10px', borderTop:'1px solid #2a2f4a' }}>
+                        <span>{p.authorName}</span>
+                        {p.ratingCount > 0 && <span style={{ color:'#f0a500' }}>★ {p.rating?.toFixed(1)}</span>}
+                      </div>
                     </div>
-                  </div>
+                  </a>
+                ))}
+              </div>
+              <div style={{ textAlign:'center', marginTop:'28px' }}>
+                <a href="/projects" style={{ display:'inline-block', backgroundColor:'transparent', color:'#dde1f0', fontWeight:600, padding:'12px 28px', borderRadius:'8px', fontSize:'14px', border:'1px solid #2a2f4a', maxWidth:'300px', width:'100%', textAlign:'center' }}>
+                  View all Projects →
                 </a>
-              )
-            })}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
