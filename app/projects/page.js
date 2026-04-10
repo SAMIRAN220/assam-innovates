@@ -74,10 +74,14 @@ export default function ProjectsPage() {
             ))}
           </div>
           <div className="desk-nav" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-            {user
-              ? <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>+ Submit Project</a>
-              : <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>Join to Submit</a>
-            }
+          {user ? (
+  <>
+    <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>+ Submit Project</a>
+    <a href="/profile" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>My Profile</a>
+  </>
+) : (
+  <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>Join to Submit</a>
+)}
           </div>
           <button className="mob-ham" onClick={()=>setMenuOpen(!menuOpen)}
             style={{ display:'none', background:'none', border:'1px solid #2a2f4a', borderRadius:'5px', padding:'6px 10px', cursor:'pointer', color:'#dde1f0', fontSize:'16px', alignItems:'center' }}>
