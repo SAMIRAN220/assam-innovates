@@ -141,9 +141,15 @@ export default function ProjectsPage() {
         ) : filtered.map(p=>(
           <a key={p.id} href={`/projects/${p.id}`} style={{ textDecoration:'none' }}>
             <div className="proj-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', overflow:'hidden', transition:'all .15s', height:'100%', display:'flex', flexDirection:'column' }}>
-              <div style={{ height:'70px', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'36px', borderBottom:'1px solid #2a2f4a', flexShrink:0 }}>
-                {p.category==='Electrical'?'⚡':p.category==='Mechanical'?'⚙️':p.category==='Civil'?'🏗️':p.category==='Coding'?'💻':p.category==='Biology'?'🧬':p.category==='Robotics'?'🤖':p.category==='IoT'?'📡':p.category==='Renewable Energy'?'☀️':'🔬'}
-              </div>
+            <div style={{ height:'70px', overflow:'hidden', borderBottom:'1px solid #2a2f4a', backgroundColor:'#13151f' }}>
+  {p.coverImage ? (
+    <img src={p.coverImage} alt={p.title} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+  ) : (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'36px' }}>
+      {p.category==='Electrical'?'⚡':p.category==='Mechanical'?'⚙️':p.category==='Civil'?'🏗️':p.category==='Coding'?'💻':p.category==='Biology'?'🧬':p.category==='Robotics'?'🤖':p.category==='IoT'?'📡':p.category==='Renewable Energy'?'☀️':'🔬'}
+    </div>
+  )}
+</div>
               <div style={{ padding:'clamp(10px,3vw,14px)', flex:1, display:'flex', flexDirection:'column' }}>
                 <div style={{ display:'flex', gap:'5px', marginBottom:'8px', flexWrap:'wrap' }}>
                   {p.level    && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 7px', borderRadius:'4px', backgroundColor:levelStyle[p.level]?.bg, color:levelStyle[p.level]?.color }}>{p.level}</span>}

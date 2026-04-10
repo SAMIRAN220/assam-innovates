@@ -1,8 +1,11 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../components/AuthProvider'
 import { db } from '../../lib/firebase'
 import { collection, addDoc, serverTimestamp, doc, setDoc, increment } from 'firebase/firestore'
+
+const CLOUD_NAME   = 'dhxvthksg'
+const UPLOAD_PRESET = 'assam-innovates'
 
 const CATEGORIES = ['Electrical','Mechanical','Civil','Coding','Biology','Robotics','IoT','Renewable Energy','Other']
 const LEVELS     = ['Beginner','Intermediate','Advanced']
@@ -15,11 +18,18 @@ function getYoutubeId(url) {
 
 export default function SubmitPage() {
   const { user, loading } = useAuth()
-  const [step, setStep]         = useState(1)
+  const [step, setStep]             = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted]   = useState(false)
   const [submittedId, setSubmittedId] = useState(null)
   const [error, setError]           = useState('')
+
+  // Image upload state
+  const [coverImage, setCoverImage]         = useState(null)   // { url, publicId }
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const fileInputRef = useRef(null)
+
   const [form, setForm] = useState({
     title:'', description:'', category:'', level:'',
     youtubeUrl:'', githubUrl:'', driveUrl:'',
@@ -38,6 +48,45 @@ export default function SubmitPage() {
   const updateLink = (i,f,val) => { const a=[...form.links]; a[i]={...a[i],[f]:val}; update('links',a) }
   const addLink    = () => update('links', [...form.links,{label:'',url:''}])
   const removeLink = (i) => update('links', form.links.filter((_,j)=>j!==i))
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { setError('Image must be under 10MB.'); return }
+
+    setUploadingImage(true)
+    setUploadProgress(0)
+    setError('')
+
+    const data = new FormData()
+    data.append('file', file)
+    data.append('upload_preset', UPLOAD_PRESET)
+    data.append('folder', 'assam-innovates')
+
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: data,
+      })
+      const result = await res.json()
+      if (result.secure_url) {
+        setCoverImage({ url: result.secure_url, publicId: result.public_id })
+        setUploadProgress(100)
+      } else {
+        setError('Upload failed. Please try again.')
+      }
+    } catch(e) {
+      console.error(e)
+      setError('Upload failed. Please check your connection.')
+    }
+    setUploadingImage(false)
+  }
+
+  const removeImage = () => {
+    setCoverImage(null)
+    setUploadProgress(0)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
   const nextStep = () => {
     setError('')
@@ -58,6 +107,7 @@ export default function SubmitPage() {
         description: form.description.trim(),
         category:    form.category,
         level:       form.level,
+        coverImage:  coverImage?.url || '',
         youtubeUrl:  form.youtubeUrl.trim(),
         githubUrl:   form.githubUrl.trim(),
         driveUrl:    form.driveUrl.trim(),
@@ -100,7 +150,7 @@ export default function SubmitPage() {
     secHead: { fontSize:'14px', fontWeight:600, marginBottom:'14px' },
   }
 
-  const steps = ['Details','Links','Review']
+  const steps = ['Details','Media & Links','Review']
   const StepBar = () => (
     <div style={{ display:'flex', alignItems:'center', marginBottom:'28px', position:'relative' }}>
       <div style={{ position:'absolute', top:'14px', left:'14px', right:'14px', height:'1px', backgroundColor:'#2a2f4a', zIndex:0 }}/>
@@ -108,8 +158,8 @@ export default function SubmitPage() {
         const n=i+1; const done=step>n; const active=step===n
         return (
           <div key={s} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'6px', position:'relative', zIndex:1 }}>
-            <div style={{ width:'28px', height:'28px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:700, backgroundColor:done?'#2dd4a0':active?'#4a9eff':'#1a1d2e', border:`1.5px solid ${done?'#2dd4a0':active?'#4a9eff':'#2a2f4a'}`, color:(done||active)?'#fff':'#7a82a0' }}>{done?'check':n}</div>
-            <div style={{ fontSize:'10px', color:active?'#4a9eff':'#7a82a0', fontWeight:active?600:400 }}>{s}</div>
+            <div style={{ width:'28px', height:'28px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:700, backgroundColor:done?'#2dd4a0':active?'#4a9eff':'#1a1d2e', border:`1.5px solid ${done?'#2dd4a0':active?'#4a9eff':'#2a2f4a'}`, color:(done||active)?'#fff':'#7a82a0' }}>{done?'✓':n}</div>
+            <div style={{ fontSize:'10px', color:active?'#4a9eff':'#7a82a0', fontWeight:active?600:400, whiteSpace:'nowrap' }}>{s}</div>
           </div>
         )
       })}
@@ -118,7 +168,7 @@ export default function SubmitPage() {
 
   if (loading || !user) return (
     <div style={{ ...S.page, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center', color:'#7a82a0' }}><div style={{ fontSize:'32px', marginBottom:'12px' }}>Loading...</div></div>
+      <div style={{ textAlign:'center', color:'#7a82a0' }}><div style={{ fontSize:'32px', marginBottom:'12px' }}>⚡</div><div>Loading...</div></div>
     </div>
   )
 
@@ -141,7 +191,12 @@ export default function SubmitPage() {
 
   return (
     <div style={S.page}>
-      <style>{`input:focus,select:focus,textarea:focus{border-color:#4a9eff!important} input::placeholder,textarea::placeholder{color:#4a5070}`}</style>
+      <style>{`
+        input:focus,select:focus,textarea:focus{border-color:#4a9eff!important}
+        input::placeholder,textarea::placeholder{color:#4a5070}
+        .upload-zone:hover{border-color:#4a9eff!important;background:rgba(74,158,255,.05)!important}
+      `}</style>
+
       <nav style={S.nav}>
         <div style={S.navIn}>
           <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', textDecoration:'none' }}><span style={{ color:'#4a9eff' }}>Assam</span> Innovates</a>
@@ -157,6 +212,7 @@ export default function SubmitPage() {
         <StepBar />
         {error && <div style={S.error}>{error}</div>}
 
+        {/* ── STEP 1: Details ── */}
         {step===1 && (
           <div>
             <div style={S.field}>
@@ -165,8 +221,7 @@ export default function SubmitPage() {
             </div>
             <div style={S.field}>
               <label style={S.label}>Description *</label>
-              <textarea style={S.textarea} placeholder="What does it do? How did you build it? What problem does it solve? What did you learn?" value={form.description} onChange={e=>update('description',e.target.value)}/>
-              <div style={S.hint}>Explain the science or engineering behind your idea — this is what makes Assam Innovates different.</div>
+              <textarea style={S.textarea} placeholder="What does it do? How did you build it? What problem does it solve?" value={form.description} onChange={e=>update('description',e.target.value)}/>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,200px),1fr))', gap:'14px', marginBottom:'18px' }}>
               <div>
@@ -184,22 +239,67 @@ export default function SubmitPage() {
                 </select>
               </div>
             </div>
+
+            {/* Bill of Materials */}
             <div style={S.section}>
               <div style={S.secHead}>Bill of materials <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
               {form.parts.map((part,i)=>(
                 <div key={i} style={{ display:'flex', gap:'8px', marginBottom:'8px' }}>
                   <input style={{ ...S.input, marginBottom:0 }} placeholder="e.g. Arduino Uno" value={part} onChange={e=>updatePart(i,e.target.value)}/>
-                  {form.parts.length>1 && <button onClick={()=>removePart(i)} style={{ ...S.btnSm, flexShrink:0 }}>X</button>}
+                  {form.parts.length>1 && <button onClick={()=>removePart(i)} style={{ ...S.btnSm, flexShrink:0 }}>✕</button>}
                 </div>
               ))}
               <button onClick={addPart} style={S.btnSm}>+ Add part</button>
             </div>
-            <button onClick={nextStep} style={{ ...S.btnP, width:'100%' }}>Continue to Links</button>
+
+            <button onClick={nextStep} style={{ ...S.btnP, width:'100%' }}>Continue to Media & Links →</button>
           </div>
         )}
 
+        {/* ── STEP 2: Media & Links ── */}
         {step===2 && (
           <div>
+
+            {/* IMAGE UPLOAD */}
+            <div style={S.section}>
+              <div style={S.secHead}>Cover image <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
+
+              {!coverImage ? (
+                <div>
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display:'none' }} id="img-upload"/>
+                  <label htmlFor="img-upload" className="upload-zone" style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'10px', border:'2px dashed #2a2f4a', borderRadius:'10px', padding:'32px 20px', cursor:'pointer', backgroundColor:'rgba(74,158,255,.02)', transition:'all .2s' }}>
+                    {uploadingImage ? (
+                      <>
+                        <div style={{ fontSize:'28px' }}>⏳</div>
+                        <div style={{ fontSize:'14px', color:'#dde1f0', fontWeight:600 }}>Uploading...</div>
+                        <div style={{ width:'100%', maxWidth:'200px', height:'4px', backgroundColor:'#2a2f4a', borderRadius:'2px', overflow:'hidden' }}>
+                          <div style={{ height:'100%', backgroundColor:'#4a9eff', width:`${uploadProgress}%`, transition:'width .3s', borderRadius:'2px' }}/>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize:'36px' }}>📸</div>
+                        <div style={{ textAlign:'center' }}>
+                          <div style={{ fontSize:'14px', color:'#dde1f0', fontWeight:600, marginBottom:'4px' }}>Click to upload cover image</div>
+                          <div style={{ fontSize:'12px', color:'#7a82a0' }}>JPG, PNG, WebP up to 10MB</div>
+                        </div>
+                      </>
+                    )}
+                  </label>
+                </div>
+              ) : (
+                <div style={{ position:'relative', borderRadius:'10px', overflow:'hidden', border:'1px solid #2a2f4a' }}>
+                  <img src={coverImage.url} alt="Cover" style={{ width:'100%', height:'200px', objectFit:'cover', display:'block' }}/>
+                  <div style={{ position:'absolute', inset:0, background:'linear-gradient(to top, rgba(0,0,0,.6) 0%, transparent 50%)' }}/>
+                  <div style={{ position:'absolute', bottom:'12px', left:'12px', right:'12px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <span style={{ fontSize:'12px', color:'#fff', fontWeight:600 }}>✅ Image uploaded successfully</span>
+                    <button onClick={removeImage} style={{ backgroundColor:'rgba(255,100,100,.2)', color:'#ff8080', border:'1px solid rgba(255,100,100,.3)', borderRadius:'5px', padding:'4px 10px', cursor:'pointer', fontSize:'11px', fontWeight:600 }}>Remove</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* YouTube */}
             <div style={S.section}>
               <div style={S.secHead}>YouTube video <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
               <input style={S.input} placeholder="https://youtube.com/watch?v=..." value={form.youtubeUrl} onChange={e=>update('youtubeUrl',e.target.value)}/>
@@ -208,45 +308,62 @@ export default function SubmitPage() {
                   <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${ytId}`} style={{ border:'none', display:'block' }} allowFullScreen/>
                 </div>
               )}
-              <div style={S.hint}>Your video will embed directly on the project page.</div>
             </div>
+
+            {/* GitHub */}
             <div style={S.section}>
               <div style={S.secHead}>GitHub repository <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
               <input style={S.input} placeholder="https://github.com/username/project" value={form.githubUrl} onChange={e=>update('githubUrl',e.target.value)}/>
             </div>
+
+            {/* Google Drive */}
             <div style={S.section}>
               <div style={S.secHead}>Google Drive / diagrams <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
               <input style={S.input} placeholder="https://drive.google.com/..." value={form.driveUrl} onChange={e=>update('driveUrl',e.target.value)}/>
               <div style={S.hint}>Share circuit diagrams, schematics, PDFs via Google Drive.</div>
             </div>
+
+            {/* Other links */}
             <div style={S.section}>
               <div style={S.secHead}>Other links <span style={{ fontSize:'12px', color:'#7a82a0', fontWeight:400 }}>(optional)</span></div>
               {form.links.map((link,i)=>(
                 <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 2fr auto', gap:'8px', marginBottom:'8px', alignItems:'center' }}>
                   <input style={{ ...S.input, marginBottom:0 }} placeholder="Label" value={link.label} onChange={e=>updateLink(i,'label',e.target.value)}/>
                   <input style={{ ...S.input, marginBottom:0 }} placeholder="https://..." value={link.url} onChange={e=>updateLink(i,'url',e.target.value)}/>
-                  {form.links.length>1 && <button onClick={()=>removeLink(i)} style={S.btnSm}>X</button>}
+                  {form.links.length>1 && <button onClick={()=>removeLink(i)} style={S.btnSm}>✕</button>}
                 </div>
               ))}
               <button onClick={addLink} style={S.btnSm}>+ Add link</button>
             </div>
+
             <div style={{ display:'flex', gap:'10px' }}>
-              <button onClick={nextStep} style={{ ...S.btnP, flex:1 }}>Review</button>
+              <button onClick={nextStep} style={{ ...S.btnP, flex:1 }}>Review →</button>
               <button onClick={()=>setStep(1)} style={S.btnS}>Back</button>
             </div>
           </div>
         )}
 
+        {/* ── STEP 3: Review ── */}
         {step===3 && (
           <div>
             <div style={S.section}>
               <div style={S.secHead}>Review your submission</div>
+
+              {/* Cover image preview */}
+              {coverImage && (
+                <div style={{ borderRadius:'8px', overflow:'hidden', height:'160px', marginBottom:'14px', border:'1px solid #2a2f4a' }}>
+                  <img src={coverImage.url} alt="Cover" style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                </div>
+              )}
+
               <div style={{ display:'flex', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
                 <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'4px', backgroundColor:'rgba(74,158,255,.1)', color:'#4a9eff' }}>{form.category}</span>
                 <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'4px', backgroundColor:form.level==='Beginner'?'rgba(45,212,160,.1)':form.level==='Intermediate'?'rgba(240,165,0,.1)':'rgba(255,100,100,.1)', color:form.level==='Beginner'?'#2dd4a0':form.level==='Intermediate'?'#f0a500':'#ff6464' }}>{form.level}</span>
               </div>
+
               <div style={{ fontSize:'20px', fontWeight:700, marginBottom:'10px' }}>{form.title}</div>
               <div style={{ fontSize:'13px', color:'#7a82a0', lineHeight:1.7, marginBottom:'16px', whiteSpace:'pre-wrap' }}>{form.description}</div>
+
               {form.parts.filter(p=>p.trim()).length>0 && (
                 <div style={{ marginBottom:'14px' }}>
                   <div style={{ fontSize:'11px', fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', color:'#7a82a0', marginBottom:'8px' }}>Parts</div>
@@ -257,24 +374,29 @@ export default function SubmitPage() {
                   </div>
                 </div>
               )}
+
               <div style={{ display:'flex', flexDirection:'column', gap:'5px', marginBottom:'14px' }}>
-                {form.youtubeUrl && <div style={{ fontSize:'13px', color:'#7a82a0' }}>YouTube video attached</div>}
-                {form.githubUrl  && <div style={{ fontSize:'13px', color:'#7a82a0' }}>GitHub repo linked</div>}
-                {form.driveUrl   && <div style={{ fontSize:'13px', color:'#7a82a0' }}>Google Drive linked</div>}
+                {coverImage   && <div style={{ fontSize:'13px', color:'#2dd4a0' }}>✅ Cover image uploaded</div>}
+                {form.youtubeUrl && <div style={{ fontSize:'13px', color:'#7a82a0' }}>▶ YouTube video attached</div>}
+                {form.githubUrl  && <div style={{ fontSize:'13px', color:'#7a82a0' }}>🐙 GitHub repo linked</div>}
+                {form.driveUrl   && <div style={{ fontSize:'13px', color:'#7a82a0' }}>📁 Google Drive linked</div>}
                 {form.links.filter(l=>l.url.trim()).map((l,i)=>(
-                  <div key={i} style={{ fontSize:'13px', color:'#7a82a0' }}>{l.label || l.url}</div>
+                  <div key={i} style={{ fontSize:'13px', color:'#7a82a0' }}>🔗 {l.label || l.url}</div>
                 ))}
               </div>
+
               <div style={{ paddingTop:'12px', borderTop:'1px solid #2a2f4a', fontSize:'13px', color:'#7a82a0' }}>
                 Submitting as <strong style={{ color:'#dde1f0' }}>{user.displayName || user.email}</strong>
               </div>
             </div>
+
             <div style={{ display:'flex', gap:'10px' }}>
               <button onClick={handleSubmit} disabled={submitting} style={{ ...S.btnP, flex:1, backgroundColor:'#2dd4a0', color:'#0d0f14', opacity:submitting?.6:1, cursor:submitting?'not-allowed':'pointer' }}>
-                {submitting ? 'Submitting...' : 'Submit Project'}
+                {submitting ? '⏳ Submitting...' : '🚀 Submit Project'}
               </button>
               <button onClick={()=>setStep(2)} style={S.btnS}>Back</button>
             </div>
+            <p style={{ textAlign:'center', fontSize:'11px', color:'#4a5070', marginTop:'14px' }}>Your project goes live immediately after submission.</p>
           </div>
         )}
       </div>

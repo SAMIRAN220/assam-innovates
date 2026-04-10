@@ -199,9 +199,15 @@ const [towns, setTowns]     = useState(0)
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,280px),1fr))', gap:'16px' }}>
                 {projects.map(p => (
                   <a key={p.id} href={`/projects/${p.id}`} className="proj-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', overflow:'hidden', display:'block', transition:'all .15s' }}>
-                    <div style={{ height:'90px', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px', borderBottom:'1px solid #2a2f4a' }}>
-                      {CAT_EMOJI[p.category] || '🔬'}
-                    </div>
+                    <div style={{ height:'90px', overflow:'hidden', borderBottom:'1px solid #2a2f4a', backgroundColor:'#13151f' }}>
+  {p.coverImage ? (
+    <img src={p.coverImage} alt={p.title} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+  ) : (
+    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'44px' }}>
+      {CAT_EMOJI[p.category] || '🔬'}
+    </div>
+  )}
+</div>
                     <div style={{ padding:'14px' }}>
                       <div style={{ display:'flex', gap:'6px', marginBottom:'8px', flexWrap:'wrap' }}>
                         {p.level    && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'4px', backgroundColor:levelStyle[p.level]?.bg, color:levelStyle[p.level]?.color }}>{p.level}</span>}
