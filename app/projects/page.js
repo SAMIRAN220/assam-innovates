@@ -22,6 +22,11 @@ function timeAgo(ts) {
   return Math.floor(diff/86400)+'d ago'
 }
 
+const CAT_EMOJI = {
+  Electrical:'⚡', Mechanical:'⚙️', Civil:'🏗️', Coding:'💻',
+  Biology:'🧬', Robotics:'🤖', IoT:'📡', 'Renewable Energy':'☀️', Other:'🔬'
+}
+
 export default function ProjectsPage() {
   const { user } = useAuth()
   const [projects, setProjects] = useState([])
@@ -31,14 +36,14 @@ export default function ProjectsPage() {
   const [search, setSearch]     = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
 
-  useEffect(()=>{ fetchProjects() },[])
+  useEffect(() => { fetchProjects() }, [])
 
   const fetchProjects = async () => {
     setLoading(true)
     try {
       const q = query(collection(db,'projects'), orderBy('createdAt','desc'))
       const snap = await getDocs(q)
-      setProjects(snap.docs.map(d=>({ id:d.id, ...d.data() })))
+      setProjects(snap.docs.map(d => ({ id:d.id, ...d.data() })))
     } catch(e) { console.error(e) }
     setLoading(false)
   }
@@ -61,57 +66,86 @@ export default function ProjectsPage() {
 
   return (
     <div style={S.page}>
-      <style>{`* { box-sizing:border-box; } input::placeholder{color:#4a5070} input:focus{border-color:#4a9eff!important;outline:none} .proj-card:hover{border-color:#4a9eff!important;transform:translateY(-1px)} @media(max-width:639px){.desk-nav{display:none!important}.mob-ham{display:flex!important}} @media(min-width:640px){.mob-ham{display:none!important}}`}</style>
+      <style>{`
+        * { box-sizing:border-box; }
+        a { text-decoration:none; color:inherit; }
+        input::placeholder{color:#4a5070}
+        input:focus{border-color:#4a9eff!important;outline:none}
+        .proj-card:hover{border-color:#4a9eff!important;transform:translateY(-1px)}
+        @media(max-width:639px){.desk-nav{display:none!important}.mob-ham{display:flex!important}}
+        @media(min-width:640px){.mob-ham{display:none!important}}
+      `}</style>
 
+      {/* NAV */}
       <nav style={S.nav}>
         <div style={S.navIn}>
-          <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', textDecoration:'none', flexShrink:0 }}>
+          <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', flexShrink:0 }}>
             <span style={{ color:'#4a9eff' }}>Assam</span> Innovates
           </a>
+
+          {/* Desktop nav */}
           <div className="desk-nav" style={{ display:'flex', gap:'24px', fontSize:'13px', flex:1, justifyContent:'center' }}>
-            {[['/',  'Home'],['/projects','Projects'],['/forum','Forum']].map(([href,label])=>(
-              <a key={label} href={href} style={{ color:label==='Projects'?'#4a9eff':'#7a82a0', fontWeight:label==='Projects'?600:400, textDecoration:'none' }}>{label}</a>
+            {[['/', 'Home'],['/projects','Projects'],['/forum','Forum']].map(([href,label]) => (
+              <a key={label} href={href} style={{ color:label==='Projects'?'#4a9eff':'#7a82a0', fontWeight:label==='Projects'?600:400 }}>{label}</a>
             ))}
           </div>
+
+          {/* Desktop right buttons */}
           <div className="desk-nav" style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-          {user ? (
-  <>
-    <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>+ Submit Project</a>
-    <a href="/profile" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>My Profile</a>
-  </>
-) : (
-  <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px', textDecoration:'none' }}>Join to Submit</a>
-)}
+            {user ? (
+              <>
+                <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px' }}>+ Submit Project</a>
+                <a href="/profile" style={{ display:'flex', alignItems:'center', gap:'6px', backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', padding:'6px 12px', borderRadius:'6px', fontSize:'13px', color:'#dde1f0' }}>👤 My Profile</a>
+              </>
+            ) : (
+              <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'7px 16px', borderRadius:'6px', fontSize:'13px' }}>Join to Submit</a>
+            )}
           </div>
-          <button className="mob-ham" onClick={()=>setMenuOpen(!menuOpen)}
+
+          {/* Mobile hamburger */}
+          <button className="mob-ham" onClick={() => setMenuOpen(!menuOpen)}
             style={{ display:'none', background:'none', border:'1px solid #2a2f4a', borderRadius:'5px', padding:'6px 10px', cursor:'pointer', color:'#dde1f0', fontSize:'16px', alignItems:'center' }}>
-            {menuOpen?'X':'='}
+            {menuOpen ? '✕' : '☰'}
           </button>
         </div>
+
+        {/* Mobile dropdown — single clean version */}
         {menuOpen && (
-          <div style={{ borderTop:'1px solid #2a2f4a', padding:'12px 0', display:'flex', flexDirection:'column' }}>
-            {[['/',  'Home'],['/projects','Projects'],['/forum','Forum']].map(([href,label])=>(
-              <a key={label} href={href} style={{ color:label==='Projects'?'#4a9eff':'#7a82a0', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a', textDecoration:'none' }}>{label}</a>
-            ))}
-            {user
-              ? <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'11px', borderRadius:'6px', marginTop:'10px', textAlign:'center', textDecoration:'none', fontSize:'14px' }}>+ Submit Project</a>
-              : <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'11px', borderRadius:'6px', marginTop:'10px', textAlign:'center', textDecoration:'none', fontSize:'14px' }}>Join to Submit</a>
-            }
+          <div style={{ borderTop:'1px solid #2a2f4a', padding:'12px 0', display:'flex', flexDirection:'column', backgroundColor:'#1a1d2e' }}>
+            <a href="/"         style={{ color:'#7a82a0', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>Home</a>
+            <a href="/projects" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a', fontWeight:600 }}>Projects</a>
+            <a href="/forum"    style={{ color:'#7a82a0', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>Forum</a>
+            {user && (
+              <a href="/profile" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a', fontWeight:600 }}>👤 My Profile</a>
+            )}
+            {user ? (
+              <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'11px', borderRadius:'6px', marginTop:'10px', textAlign:'center', fontSize:'14px' }}>+ Submit Project</a>
+            ) : (
+              <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'11px', borderRadius:'6px', marginTop:'10px', textAlign:'center', fontSize:'14px' }}>Join to Submit</a>
+            )}
           </div>
         )}
       </nav>
 
+      {/* PAGE HEADER */}
       <div style={{ padding:'clamp(28px,6vw,48px) 16px 24px', borderBottom:'1px solid #2a2f4a', maxWidth:'1100px', margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px', flexWrap:'wrap' }}>
           <div>
             <div style={{ fontSize:'11px', fontWeight:600, letterSpacing:'1.5px', color:'#4a9eff', textTransform:'uppercase', marginBottom:'8px' }}>Project Hub</div>
             <h1 style={{ fontSize:'clamp(22px,5vw,40px)', fontWeight:800, marginBottom:'10px', lineHeight:1.1 }}>What Makers Are Building</h1>
-            <p style={{ color:'#7a82a0', fontSize:'clamp(13px,3vw,15px)', maxWidth:'480px', lineHeight:1.6 }}>Real projects and ideas from makers across Assam. Submit yours and get rated by the community.</p>
+            <p style={{ color:'#7a82a0', fontSize:'clamp(13px,3vw,15px)', maxWidth:'480px', lineHeight:1.6 }}>
+              Real projects and ideas from makers across Assam. Submit yours and get rated by the community.
+            </p>
           </div>
-          {user && <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'10px 22px', borderRadius:'7px', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>+ Submit Your Project</a>}
+          {user && (
+            <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'10px 22px', borderRadius:'7px', fontSize:'14px', flexShrink:0 }}>
+              + Submit Your Project
+            </a>
+          )}
         </div>
       </div>
 
+      {/* FILTERS */}
       <div style={{ borderBottom:'1px solid #2a2f4a', maxWidth:'1100px', margin:'0 auto', padding:'14px 16px' }}>
         <input type="text" placeholder="Search projects, authors..." value={search} onChange={e=>setSearch(e.target.value)} style={S.input}/>
         <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'8px' }}>
@@ -127,10 +161,12 @@ export default function ProjectsPage() {
         </div>
       </div>
 
+      {/* PROJECT GRID */}
       <div style={{ maxWidth:'1100px', margin:'0 auto', padding:'20px 16px', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,280px),1fr))', gap:'14px' }}>
         {loading ? (
           <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'60px 20px', color:'#7a82a0' }}>
-            <div style={{ fontSize:'32px', marginBottom:'12px' }}>Loading projects...</div>
+            <div style={{ fontSize:'32px', marginBottom:'12px' }}>⚡</div>
+            <div>Loading projects...</div>
           </div>
         ) : filtered.length===0 ? (
           <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'60px 20px', color:'#7a82a0' }}>
@@ -139,21 +175,24 @@ export default function ProjectsPage() {
               {projects.length===0 ? 'No projects yet — be the first!' : 'No projects found'}
             </div>
             {user && projects.length===0 && (
-              <a href="/submit" style={{ display:'inline-block', marginTop:'16px', backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'11px 24px', borderRadius:'7px', fontSize:'14px', textDecoration:'none' }}>Submit the First Project</a>
+              <a href="/submit" style={{ display:'inline-block', marginTop:'16px', backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'11px 24px', borderRadius:'7px', fontSize:'14px' }}>Submit the First Project</a>
             )}
           </div>
-        ) : filtered.map(p=>(
+        ) : filtered.map(p => (
           <a key={p.id} href={`/projects/${p.id}`} style={{ textDecoration:'none' }}>
             <div className="proj-card" style={{ backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', overflow:'hidden', transition:'all .15s', height:'100%', display:'flex', flexDirection:'column' }}>
-            <div style={{ height:'70px', overflow:'hidden', borderBottom:'1px solid #2a2f4a', backgroundColor:'#13151f' }}>
-  {p.coverImage ? (
-    <img src={p.coverImage} alt={p.title} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
-  ) : (
-    <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'36px' }}>
-      {p.category==='Electrical'?'⚡':p.category==='Mechanical'?'⚙️':p.category==='Civil'?'🏗️':p.category==='Coding'?'💻':p.category==='Biology'?'🧬':p.category==='Robotics'?'🤖':p.category==='IoT'?'📡':p.category==='Renewable Energy'?'☀️':'🔬'}
-    </div>
-  )}
-</div>
+              {/* Thumbnail */}
+              <div style={{ height:'clamp(80px,15vw,110px)', overflow:'hidden', borderBottom:'1px solid #2a2f4a', flexShrink:0, backgroundColor:'#13151f' }}>
+                {p.coverImage ? (
+                  <img src={p.coverImage} alt={p.title} style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}/>
+                ) : (
+                  <div style={{ width:'100%', height:'100%', background:'linear-gradient(135deg,#1e2235,#20243a)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'clamp(32px,8vw,44px)' }}>
+                    {CAT_EMOJI[p.category] || '🔬'}
+                  </div>
+                )}
+              </div>
+
+              {/* Body */}
               <div style={{ padding:'clamp(10px,3vw,14px)', flex:1, display:'flex', flexDirection:'column' }}>
                 <div style={{ display:'flex', gap:'5px', marginBottom:'8px', flexWrap:'wrap' }}>
                   {p.level    && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 7px', borderRadius:'4px', backgroundColor:levelStyle[p.level]?.bg, color:levelStyle[p.level]?.color }}>{p.level}</span>}
@@ -165,8 +204,8 @@ export default function ProjectsPage() {
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:'10px', borderTop:'1px solid #2a2f4a', fontSize:'12px', color:'#7a82a0' }}>
                   <span>{p.authorName}</span>
-                  <div style={{ display:'flex', gap:'8px' }}>
-                    {p.ratingCount>0 && <span style={{ color:'#f0a500' }}>★ {p.rating?.toFixed(1)}</span>}
+                  <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                    {p.ratingCount>0 && <span style={{ color:'#f0a500', fontWeight:600 }}>★ {p.rating?.toFixed(1)}</span>}
                     <span>{timeAgo(p.createdAt)}</span>
                   </div>
                 </div>
@@ -176,12 +215,13 @@ export default function ProjectsPage() {
         ))}
       </div>
 
+      {/* CTA for non-logged-in users */}
       {!user && !loading && projects.length>0 && (
         <div style={{ maxWidth:'1100px', margin:'0 auto 40px', padding:'0 16px' }}>
           <div style={{ background:'linear-gradient(135deg,rgba(74,158,255,.07),rgba(45,212,160,.05))', border:'1px solid #2a2f4a', borderRadius:'12px', padding:'28px', textAlign:'center' }}>
             <div style={{ fontSize:'18px', fontWeight:700, marginBottom:'8px' }}>Have a project or idea to share?</div>
             <p style={{ color:'#7a82a0', fontSize:'14px', marginBottom:'16px' }}>Create a free account to submit your own projects.</p>
-            <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'11px 24px', borderRadius:'7px', fontSize:'14px', textDecoration:'none' }}>Sign Up Free</a>
+            <a href="/signup" style={{ backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'11px 24px', borderRadius:'7px', fontSize:'14px' }}>Sign Up Free →</a>
           </div>
         </div>
       )}

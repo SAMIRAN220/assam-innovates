@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useAuth } from '../../../components/AuthProvider'
 import { db } from '../../../lib/firebase'
-import { doc, getDoc, updateDoc, arrayUnion, increment } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore'
 
 function getYoutubeId(url) {
   if (!url) return null
@@ -14,10 +14,10 @@ function getYoutubeId(url) {
 function timeAgo(ts) {
   if (!ts) return ''
   const d = ts.toDate ? ts.toDate() : new Date(ts)
-  const diff = Math.floor((Date.now()-d)/1000)
-  if (diff<3600)  return Math.floor(diff/60)+'m ago'
-  if (diff<86400) return Math.floor(diff/3600)+'h ago'
-  return Math.floor(diff/86400)+'d ago'
+  const diff = Math.floor((Date.now() - d) / 1000)
+  if (diff < 3600)  return Math.floor(diff/60) + 'm ago'
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago'
+  return Math.floor(diff/86400) + 'd ago'
 }
 
 const levelStyle = {
@@ -29,41 +29,50 @@ const levelStyle = {
 export default function ProjectDetailPage() {
   const { id } = useParams()
   const { user } = useAuth()
-  const [project, setProject]     = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [hoverRating, setHoverRating] = useState(0)
-  const [ratingDone, setRatingDone]   = useState(false)
+  const [project, setProject]           = useState(null)
+  const [loading, setLoading]           = useState(true)
+  const [hoverRating, setHoverRating]   = useState(0)
+  const [ratingDone, setRatingDone]     = useState(false)
   const [submittingRating, setSubmittingRating] = useState(false)
+  const [menuOpen, setMenuOpen]         = useState(false)
 
-  useEffect(()=>{ if(id) fetchProject() },[id])
+  useEffect(() => { if (id) fetchProject() }, [id])
 
-  const fetchProject = async () => {
-    setLoading(true)
-    try {
-      const snap = await getDoc(doc(db,'projects',id))
-      if (snap.exists()) {
-        const data = { id:snap.id, ...snap.data() }
-        setProject(data)
-        if (user && data.ratedBy?.includes(user.uid)) setRatingDone(true)
+    const fetchProject = async () => {
+        setLoading(true)
+        try {
+          const snap = await getDoc(doc(db, 'projects', id))
+          if (snap.exists()) {
+            const data = { id: snap.id, ...snap.data() }
+            setProject(data)
+            // Check Firebase ratedBy array
+            if (user && data.ratedBy?.includes(user.uid)) setRatingDone(true)
+            // Also check localStorage as instant backup
+            const localRated = localStorage.getItem(`rated_${id}`)
+            if (localRated) setRatingDone(true)
+          }
+        } catch(e) { console.error(e) }
+        setLoading(false)
       }
-    } catch(e) { console.error(e) }
-    setLoading(false)
-  }
+
+  const isOwnProject = user && project && project.authorId === user.uid
 
   const submitRating = async (rating) => {
-    if (!user)          { window.location.href='/login'; return }
+    if (!user)          { window.location.href = '/login'; return }
+    if (isOwnProject)   return  // FIX #4 — can't rate own project
     if (ratingDone || submittingRating) return
     setSubmittingRating(true)
     try {
-      const newCount  = (project.ratingCount||0)+1
-      const newRating = ((project.rating||0)*(project.ratingCount||0)+rating)/newCount
-      await updateDoc(doc(db,'projects',id), {
+      const newCount  = (project.ratingCount || 0) + 1
+      const newRating = ((project.rating || 0) * (project.ratingCount || 0) + rating) / newCount
+      await updateDoc(doc(db, 'projects', id), {
         rating:      newRating,
         ratingCount: newCount,
         ratedBy:     arrayUnion(user.uid),
       })
-      setProject(p=>({ ...p, rating:newRating, ratingCount:newCount }))
+      setProject(p => ({ ...p, rating: newRating, ratingCount: newCount }))
       setRatingDone(true)
+      localStorage.setItem(`rated_${id}`, 'true')
     } catch(e) { console.error(e) }
     setSubmittingRating(false)
   }
@@ -71,7 +80,7 @@ export default function ProjectDetailPage() {
   const S = {
     page:  { backgroundColor:'#0d0f14', minHeight:'100vh', fontFamily:'Inter,system-ui,sans-serif', color:'#dde1f0' },
     nav:   { backgroundColor:'#1a1d2e', borderBottom:'1px solid #2a2f4a', padding:'0 20px', position:'sticky', top:0, zIndex:100 },
-    navIn: { height:'52px', display:'flex', alignItems:'center', justifyContent:'space-between', maxWidth:'900px', margin:'0 auto' },
+    navIn: { height:'52px', display:'flex', alignItems:'center', justifyContent:'space-between', maxWidth:'900px', margin:'0 auto', gap:'12px' },
     wrap:  { maxWidth:'900px', margin:'0 auto', padding:'24px 20px 60px' },
     card:  { backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'10px', padding:'20px', marginBottom:'16px' },
     head:  { fontSize:'12px', fontWeight:600, letterSpacing:'1px', textTransform:'uppercase', color:'#7a82a0', marginBottom:'12px' },
@@ -80,7 +89,7 @@ export default function ProjectDetailPage() {
 
   if (loading) return (
     <div style={{ ...S.page, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center', color:'#7a82a0' }}><div style={{ fontSize:'32px', marginBottom:'12px' }}>Loading...</div></div>
+      <div style={{ textAlign:'center', color:'#7a82a0' }}><div style={{ fontSize:'32px', marginBottom:'12px' }}>⚡</div><div>Loading project...</div></div>
     </div>
   )
   if (!project) return (
@@ -96,16 +105,33 @@ export default function ProjectDetailPage() {
 
   return (
     <div style={S.page}>
-      <style>{`@media(max-width:639px){.desk-nav{display:none!important}} .star-btn:hover{transform:scale(1.2);transition:transform .1s}`}</style>
+      <style>{`
+        @media(max-width:639px){.desk-nav{display:none!important}.mob-ham{display:flex!important}}
+        @media(min-width:640px){.mob-ham{display:none!important}}
+        .star-btn:hover{transform:scale(1.2);transition:transform .1s}
+      `}</style>
 
+      {/* NAV */}
       <nav style={S.nav}>
         <div style={S.navIn}>
           <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', textDecoration:'none' }}><span style={{ color:'#4a9eff' }}>Assam</span> Innovates</a>
           <div className="desk-nav" style={{ display:'flex', gap:'16px', alignItems:'center' }}>
-            <a href="/projects" style={{ color:'#4a9eff', fontSize:'13px', textDecoration:'none', fontWeight:600 }}>Projects</a>
+            <a href="/projects" style={{ color:'#4a9eff', fontSize:'13px', textDecoration:'none', fontWeight:600 }}>← Projects</a>
+            {user && <a href="/profile" style={{ color:'#7a82a0', fontSize:'13px', textDecoration:'none' }}>My Profile</a>}
             {user && <a href="/submit" style={{ backgroundColor:'#2dd4a0', color:'#0d0f14', fontWeight:700, padding:'6px 14px', borderRadius:'5px', textDecoration:'none', fontSize:'12px' }}>+ Submit</a>}
           </div>
+          <button className="mob-ham" onClick={() => setMenuOpen(!menuOpen)}
+            style={{ display:'none', background:'none', border:'1px solid #2a2f4a', borderRadius:'5px', padding:'6px 10px', cursor:'pointer', color:'#dde1f0', fontSize:'16px', alignItems:'center' }}>
+            {menuOpen ? '✕' : '☰'}
+          </button>
         </div>
+        {menuOpen && (
+          <div style={{ borderTop:'1px solid #2a2f4a', padding:'12px 0', display:'flex', flexDirection:'column', backgroundColor:'#1a1d2e' }}>
+            <a href="/projects" style={{ color:'#4a9eff', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>← Projects</a>
+            {user && <a href="/profile" style={{ color:'#7a82a0', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a' }}>My Profile</a>}
+            {user && <a href="/submit" style={{ color:'#2dd4a0', padding:'11px 4px', fontSize:'14px', borderBottom:'1px solid #20243a', fontWeight:600 }}>+ Submit Project</a>}
+          </div>
+        )}
       </nav>
 
       <div style={S.wrap}>
@@ -113,6 +139,12 @@ export default function ProjectDetailPage() {
 
         {/* HEADER */}
         <div style={{ marginBottom:'24px' }}>
+          {/* Cover image */}
+          {project.coverImage && (
+            <div style={{ borderRadius:'12px', overflow:'hidden', height:'240px', marginBottom:'20px', border:'1px solid #2a2f4a' }}>
+              <img src={project.coverImage} alt={project.title} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+            </div>
+          )}
           <div style={{ display:'flex', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
             {project.level    && <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'4px', backgroundColor:levelStyle[project.level]?.bg, color:levelStyle[project.level]?.color }}>{project.level}</span>}
             {project.category && <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'4px', backgroundColor:'rgba(74,158,255,.1)', color:'#4a9eff' }}>{project.category}</span>}
@@ -124,8 +156,21 @@ export default function ProjectDetailPage() {
             </div>
             <span style={{ fontSize:'13px', color:'#dde1f0', fontWeight:600 }}>{project.authorName}</span>
             <span style={{ fontSize:'12px', color:'#7a82a0' }}>{timeAgo(project.createdAt)}</span>
-            {project.ratingCount>0 && <span style={{ fontSize:'13px', color:'#f0a500', fontWeight:600 }}>★ {project.rating?.toFixed(1)} ({project.ratingCount} rating{project.ratingCount!==1?'s':''})</span>}
+            {/* FIX #5 — show average rating */}
+            {project.ratingCount > 0 && (
+              <span style={{ fontSize:'13px', color:'#f0a500', fontWeight:600 }}>
+                ★ {project.rating?.toFixed(1)} avg ({project.ratingCount} rating{project.ratingCount!==1?'s':''})
+              </span>
+            )}
           </div>
+          {/* Edit button for own project */}
+          {isOwnProject && (
+            <div style={{ marginTop:'14px' }}>
+              <a href={`/projects/${id}/edit`} style={{ display:'inline-flex', alignItems:'center', gap:'6px', backgroundColor:'rgba(74,158,255,.1)', border:'1px solid rgba(74,158,255,.3)', borderRadius:'6px', padding:'8px 16px', fontSize:'13px', color:'#4a9eff', textDecoration:'none', fontWeight:600 }}>
+                ✏️ Edit this project
+              </a>
+            </div>
+          )}
         </div>
 
         {/* DESCRIPTION */}
@@ -145,35 +190,25 @@ export default function ProjectDetailPage() {
         )}
 
         {/* LINKS */}
-        {(project.githubUrl || project.driveUrl || project.links?.filter(l=>l.url).length>0) && (
+        {(project.githubUrl || project.driveUrl || project.links?.filter(l=>l.url).length > 0) && (
           <div style={S.card}>
             <div style={S.head}>Links & resources</div>
             <div style={{ display:'flex', flexWrap:'wrap' }}>
-              {project.githubUrl && (
-                <a href={project.githubUrl} target="_blank" rel="noreferrer" style={S.link}>
-                  <span>🐙</span> GitHub Repository
-                </a>
-              )}
-              {project.driveUrl && (
-                <a href={project.driveUrl} target="_blank" rel="noreferrer" style={S.link}>
-                  <span>📁</span> Google Drive / Diagrams
-                </a>
-              )}
-              {project.links?.filter(l=>l.url).map((l,i)=>(
-                <a key={i} href={l.url} target="_blank" rel="noreferrer" style={S.link}>
-                  <span>🔗</span> {l.label || l.url}
-                </a>
+              {project.githubUrl && <a href={project.githubUrl} target="_blank" rel="noreferrer" style={S.link}>🐙 GitHub Repository</a>}
+              {project.driveUrl  && <a href={project.driveUrl}  target="_blank" rel="noreferrer" style={S.link}>📁 Google Drive / Diagrams</a>}
+              {project.links?.filter(l=>l.url).map((l,i) => (
+                <a key={i} href={l.url} target="_blank" rel="noreferrer" style={S.link}>🔗 {l.label || l.url}</a>
               ))}
             </div>
           </div>
         )}
 
         {/* BILL OF MATERIALS */}
-        {project.parts?.filter(p=>p).length>0 && (
+        {project.parts?.filter(p=>p).length > 0 && (
           <div style={S.card}>
             <div style={S.head}>Bill of materials</div>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-              {project.parts.filter(p=>p).map((part,i)=>(
+              {project.parts.filter(p=>p).map((part,i) => (
                 <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', backgroundColor:'#13151f', borderRadius:'5px', border:'1px solid #2a2f4a', fontSize:'14px' }}>
                   <div style={{ width:'22px', height:'22px', borderRadius:'50%', backgroundColor:'#2a2f4a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px', fontWeight:700, color:'#7a82a0', flexShrink:0 }}>{i+1}</div>
                   {part}
@@ -183,15 +218,25 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {/* RATING */}
+        {/* RATING — FIX #4: hide for own project */}
         <div style={S.card}>
           <div style={S.head}>Rate this project</div>
-          {ratingDone ? (
+          {isOwnProject ? (
+            <div style={{ textAlign:'center', padding:'16px 0', color:'#7a82a0', fontSize:'14px' }}>
+              <div style={{ fontSize:'24px', marginBottom:'8px' }}>🚫</div>
+              You cannot rate your own project.
+              {project.ratingCount > 0 && (
+                <div style={{ marginTop:'8px', color:'#f0a500', fontWeight:600 }}>
+                  Community avg: ★ {project.rating?.toFixed(1)} from {project.ratingCount} rating{project.ratingCount!==1?'s':''}
+                </div>
+              )}
+            </div>
+          ) : ratingDone ? (
             <div style={{ textAlign:'center', padding:'16px 0' }}>
               <div style={{ fontSize:'28px', marginBottom:'8px' }}>⭐</div>
               <div style={{ fontSize:'15px', fontWeight:600, color:'#2dd4a0', marginBottom:'4px' }}>Thanks for your rating!</div>
               <div style={{ fontSize:'13px', color:'#7a82a0' }}>
-                Current average: <strong style={{ color:'#f0a500' }}>{project.rating?.toFixed(1)}/10</strong> from {project.ratingCount} rating{project.ratingCount!==1?'s':''}
+                Community average: <strong style={{ color:'#f0a500' }}>★ {project.rating?.toFixed(1)}</strong> from {project.ratingCount} rating{project.ratingCount!==1?'s':''}
               </div>
             </div>
           ) : (
@@ -202,15 +247,15 @@ export default function ProjectDetailPage() {
               {user ? (
                 <>
                   <div style={{ display:'flex', gap:'6px', justifyContent:'center', flexWrap:'wrap', marginBottom:'10px' }}>
-                    {[1,2,3,4,5,6,7,8,9,10].map(n=>(
+                    {[1,2,3,4,5,6,7,8,9,10].map(n => (
                       <button key={n} className="star-btn"
-                        onClick={()=>submitRating(n)}
-                        onMouseEnter={()=>setHoverRating(n)}
-                        onMouseLeave={()=>setHoverRating(0)}
-                        disabled={submittingRating}
-                        style={{ width:'38px', height:'38px', borderRadius:'6px', border:'1px solid', borderColor:n<=(hoverRating||0)?'#f0a500':'#2a2f4a', backgroundColor:n<=(hoverRating||0)?'rgba(240,165,0,.1)':'#13151f', color:n<=(hoverRating||0)?'#f0a500':'#7a82a0', fontWeight:700, fontSize:'13px', cursor:'pointer', transition:'all .1s' }}>
-                        {n}
-                      </button>
+                      onClick={() => submitRating(n)}
+                      onMouseEnter={() => !ratingDone && setHoverRating(n)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      disabled={submittingRating || ratingDone}
+                      style={{ width:'38px', height:'38px', borderRadius:'6px', border:'1px solid', borderColor:n<=(hoverRating||0)?'#f0a500':'#2a2f4a', backgroundColor:n<=(hoverRating||0)?'rgba(240,165,0,.1)':'#13151f', color:n<=(hoverRating||0)?'#f0a500':'#7a82a0', fontWeight:700, fontSize:'13px', cursor:ratingDone?'not-allowed':'pointer', opacity:ratingDone?0.5:1 }}>
+                      {n}
+                    </button>
                     ))}
                   </div>
                   <div style={{ fontSize:'11px', color:'#4a5070' }}>Hover to preview · Click to submit</div>
@@ -221,7 +266,6 @@ export default function ProjectDetailPage() {
             </div>
           )}
         </div>
-
       </div>
     </div>
   )
