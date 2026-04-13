@@ -52,15 +52,15 @@ function timeAgo(ts) {
 
 export default function ProfilePage() {
   const { user, loading, logout } = useAuth()
-  const [profile, setProfile]           = useState(null)
-  const [myProjects, setMyProjects]     = useState([])
+  const [profile, setProfile]             = useState(null)
+  const [myProjects, setMyProjects]       = useState([])
   const [ratedProjects, setRatedProjects] = useState([])
-  const [tab, setTab]                   = useState('projects')
-  const [saving, setSaving]             = useState(false)
-  const [dataLoading, setDataLoading]   = useState(true)
-  const [menuOpen, setMenuOpen]         = useState(false)
+  const [tab, setTab]                     = useState('projects')
+  const [saving, setSaving]               = useState(false)
+  const [dataLoading, setDataLoading]     = useState(true)
+  const [menuOpen, setMenuOpen]           = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [saveMsg, setSaveMsg]           = useState('')
+  const [saveMsg, setSaveMsg]             = useState('')
   const photoInputRef = useRef(null)
 
   const [editForm, setEditForm] = useState({
@@ -78,37 +78,62 @@ export default function ProfilePage() {
       const ref  = doc(db, 'users', user.uid)
       const snap = await getDoc(ref)
       let profileData
+
       if (snap.exists()) {
         profileData = snap.data()
+
+        // Auto-sync Google photo if Firestore has none saved yet
+        if (!profileData.photoURL && user.photoURL) {
+          await setDoc(ref, { photoURL: user.photoURL }, { merge: true })
+          profileData = { ...profileData, photoURL: user.photoURL }
+        }
+
         setProfile(profileData)
         setEditForm({
           name:       profileData.name       || user.displayName || '',
           bio:        profileData.bio        || '',
           town:       profileData.town       || '',
           skillLevel: profileData.skillLevel || '',
-          photoURL:   profileData.photoURL   || user.photoURL || '',
+          photoURL:   profileData.photoURL   || user.photoURL   || '',
         })
       } else {
+        // First time — create profile, always save Google photo
         const newProfile = {
-          name:user.displayName||'', email:user.email||'', photoURL:user.photoURL||'',
-          bio:'', town:'', skillLevel:'', createdAt:serverTimestamp(), projectCount:0, avgRating:0,
+          name:         user.displayName || '',
+          email:        user.email       || '',
+          photoURL:     user.photoURL    || '',
+          bio:          '',
+          town:         '',
+          skillLevel:   '',
+          createdAt:    serverTimestamp(),
+          projectCount: 0,
+          avgRating:    0,
         }
         await setDoc(ref, newProfile)
         setProfile(newProfile)
-        setEditForm({ name:user.displayName||'', bio:'', town:'', skillLevel:'', photoURL:user.photoURL||'' })
+        setEditForm({
+          name:       user.displayName || '',
+          bio:        '',
+          town:       '',
+          skillLevel: '',
+          photoURL:   user.photoURL    || '',
+        })
       }
 
+      // Fetch my projects
       const projSnap = await getDocs(query(collection(db,'projects'), where('authorId','==',user.uid)))
-      const myProj   = projSnap.docs.map(d=>({id:d.id,...d.data()}))
-        .sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0))
+      const myProj   = projSnap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0))
       setMyProjects(myProj)
 
+      // Fetch projects I've rated (excluding my own)
       const allProjSnap = await getDocs(collection(db,'projects'))
       const rated = allProjSnap.docs
-        .map(d=>({id:d.id,...d.data()}))
-        .filter(p=>p.ratedBy?.includes(user.uid) && p.authorId!==user.uid)
-        .sort((a,b)=>b.rating-a.rating)
+        .map(d => ({ id:d.id, ...d.data() }))
+        .filter(p => p.ratedBy?.includes(user.uid) && p.authorId !== user.uid)
+        .sort((a,b) => b.rating - a.rating)
       setRatedProjects(rated)
+
     } catch(e) { console.error(e) }
     setDataLoading(false)
   }
@@ -136,19 +161,27 @@ export default function ProfilePage() {
   const saveProfile = async () => {
     setSaving(true); setSaveMsg('')
     try {
+      const photoToSave = editForm.photoURL || user.photoURL || ''
       await setDoc(doc(db,'users',user.uid), {
         name:       editForm.name.trim(),
         bio:        editForm.bio.trim(),
         town:       editForm.town,
         skillLevel: editForm.skillLevel,
-        photoURL:   editForm.photoURL,
-      }, { merge:true })
-      // Update Firebase Auth display name and photo
+        photoURL:   photoToSave,
+      }, { merge: true })
       await updateProfile(auth.currentUser, {
         displayName: editForm.name.trim(),
-        photoURL:    editForm.photoURL,
+        photoURL:    photoToSave,
       })
-      setProfile(p => ({ ...p, name:editForm.name.trim(), bio:editForm.bio.trim(), town:editForm.town, skillLevel:editForm.skillLevel, photoURL:editForm.photoURL }))
+      setProfile(p => ({
+        ...p,
+        name:       editForm.name.trim(),
+        bio:        editForm.bio.trim(),
+        town:       editForm.town,
+        skillLevel: editForm.skillLevel,
+        photoURL:   photoToSave,
+      }))
+      setEditForm(p => ({ ...p, photoURL: photoToSave }))
       setSaveMsg('✅ Profile saved!')
       setTimeout(() => setSaveMsg(''), 3000)
     } catch(e) { console.error(e); setSaveMsg('❌ Something went wrong.') }
@@ -161,37 +194,40 @@ export default function ProfilePage() {
   const avgRating       = ratedMyProjects.length > 0
     ? myProjects.reduce((s,p) => s + (p.rating||0)*(p.ratingCount||0), 0) / totalVotes
     : 0
-  const bestProject = ratedMyProjects.sort((a,b) => b.rating - a.rating)[0]
+  const bestProject = [...ratedMyProjects].sort((a,b) => b.rating - a.rating)[0]
   const topBadge    = bestProject ? getBadge(bestProject.rating) : null
 
   const earnedBadges = []
   if (myProjects.some(p=>p.rating>=8 && p.ratingCount>0))  earnedBadges.push({ emoji:'🥇', label:'Gold',     color:'#f0a500', bg:'rgba(240,165,0,.1)',   border:'rgba(240,165,0,.3)',   desc:'Achieved a rating of 8.0 or above'  })
   if (myProjects.some(p=>p.rating>=6 && p.ratingCount>0))  earnedBadges.push({ emoji:'🥈', label:'Silver',   color:'#9ba8b5', bg:'rgba(155,168,181,.1)', border:'rgba(155,168,181,.3)', desc:'Achieved a rating of 6.0 or above'  })
   if (myProjects.some(p=>p.rating>=4 && p.ratingCount>0))  earnedBadges.push({ emoji:'🥉', label:'Bronze',   color:'#cd7f32', bg:'rgba(205,127,50,.1)',  border:'rgba(205,127,50,.3)',  desc:'Achieved a rating of 4.0 or above'  })
-  if (myProjects.length >= 1) earnedBadges.push({ emoji:'🚀', label:'Pioneer',   color:'#4a9eff', bg:'rgba(74,158,255,.1)',  border:'rgba(74,158,255,.3)',  desc:'Submitted your first project'        })
-  if (myProjects.length >= 3) earnedBadges.push({ emoji:'🔨', label:'Builder',   color:'#2dd4a0', bg:'rgba(45,212,160,.1)',  border:'rgba(45,212,160,.3)',  desc:'Submitted 3 or more projects'        })
-  if (myProjects.length >= 5) earnedBadges.push({ emoji:'⚡', label:'Innovator', color:'#a78bfa', bg:'rgba(167,139,250,.1)', border:'rgba(167,139,250,.3)', desc:'Submitted 5 or more projects'        })
-  if (ratedProjects.length >= 5) earnedBadges.push({ emoji:'⭐', label:'Reviewer', color:'#f0a500', bg:'rgba(240,165,0,.08)',  border:'rgba(240,165,0,.2)',   desc:'Rated 5 or more projects'           })
+  if (myProjects.length >= 1) earnedBadges.push({ emoji:'🚀', label:'Pioneer',   color:'#4a9eff', bg:'rgba(74,158,255,.1)',  border:'rgba(74,158,255,.3)',  desc:'Submitted your first project'   })
+  if (myProjects.length >= 3) earnedBadges.push({ emoji:'🔨', label:'Builder',   color:'#2dd4a0', bg:'rgba(45,212,160,.1)',  border:'rgba(45,212,160,.3)',  desc:'Submitted 3 or more projects'   })
+  if (myProjects.length >= 5) earnedBadges.push({ emoji:'⚡', label:'Innovator', color:'#a78bfa', bg:'rgba(167,139,250,.1)', border:'rgba(167,139,250,.3)', desc:'Submitted 5 or more projects'   })
+  if (ratedProjects.length >= 5) earnedBadges.push({ emoji:'⭐', label:'Reviewer', color:'#f0a500', bg:'rgba(240,165,0,.08)', border:'rgba(240,165,0,.2)',   desc:'Rated 5 or more projects'       })
 
   const S = {
-    page:  { backgroundColor:'#0d0f14', minHeight:'100vh', fontFamily:'Inter,system-ui,sans-serif', color:'#dde1f0', overflowX:'hidden' },
-    nav:   { backgroundColor:'#1a1d2e', borderBottom:'1px solid #2a2f4a', padding:'0 20px', position:'sticky', top:0, zIndex:100 },
-    navIn: { height:'52px', display:'flex', alignItems:'center', justifyContent:'space-between', maxWidth:'900px', margin:'0 auto', gap:'12px' },
-    wrap:  { maxWidth:'900px', margin:'0 auto', padding:'24px 20px 60px' },
-    card:  { backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'12px', padding:'20px 24px', marginBottom:'16px' },
-    input: { width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none' },
-    textarea:{ width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none', resize:'vertical', minHeight:'80px' },
-    select:{ width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none', cursor:'pointer' },
-    btnP:  { backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'9px 20px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'13px' },
-    btnS:  { backgroundColor:'transparent', color:'#7a82a0', padding:'9px 20px', borderRadius:'7px', border:'1px solid #2a2f4a', cursor:'pointer', fontSize:'13px' },
-    btnD:  { backgroundColor:'rgba(255,100,100,.08)', color:'#ff8080', padding:'9px 20px', borderRadius:'7px', border:'1px solid rgba(255,100,100,.2)', cursor:'pointer', fontSize:'13px' },
-    label: { display:'block', fontSize:'12px', fontWeight:600, color:'#7a82a0', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'.5px' },
-    field: { marginBottom:'16px' },
+    page:     { backgroundColor:'#0d0f14', minHeight:'100vh', fontFamily:'Inter,system-ui,sans-serif', color:'#dde1f0', overflowX:'hidden' },
+    nav:      { backgroundColor:'#1a1d2e', borderBottom:'1px solid #2a2f4a', padding:'0 20px', position:'sticky', top:0, zIndex:100 },
+    navIn:    { height:'52px', display:'flex', alignItems:'center', justifyContent:'space-between', maxWidth:'900px', margin:'0 auto', gap:'12px' },
+    wrap:     { maxWidth:'900px', margin:'0 auto', padding:'24px 20px 60px' },
+    card:     { backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'12px', padding:'20px 24px', marginBottom:'16px' },
+    input:    { width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none' },
+    textarea: { width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none', resize:'vertical', minHeight:'80px' },
+    select:   { width:'100%', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'7px', padding:'10px 14px', color:'#dde1f0', fontSize:'14px', fontFamily:'inherit', outline:'none', cursor:'pointer' },
+    btnP:     { backgroundColor:'#4a9eff', color:'#fff', fontWeight:700, padding:'9px 20px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'13px' },
+    btnS:     { backgroundColor:'transparent', color:'#7a82a0', padding:'9px 20px', borderRadius:'7px', border:'1px solid #2a2f4a', cursor:'pointer', fontSize:'13px' },
+    btnD:     { backgroundColor:'rgba(255,100,100,.08)', color:'#ff8080', padding:'9px 20px', borderRadius:'7px', border:'1px solid rgba(255,100,100,.2)', cursor:'pointer', fontSize:'13px' },
+    label:    { display:'block', fontSize:'12px', fontWeight:600, color:'#7a82a0', marginBottom:'6px', textTransform:'uppercase', letterSpacing:'.5px' },
+    field:    { marginBottom:'16px' },
   }
 
   if (loading || !user) return (
     <div style={{ ...S.page, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ textAlign:'center', color:'#7a82a0' }}><div style={{ fontSize:'32px', marginBottom:'12px' }}>⚡</div><div>Loading...</div></div>
+      <div style={{ textAlign:'center', color:'#7a82a0' }}>
+        <div style={{ fontSize:'32px', marginBottom:'12px' }}>⚡</div>
+        <div>Loading...</div>
+      </div>
     </div>
   )
 
@@ -199,10 +235,10 @@ export default function ProfilePage() {
   const displayName  = profile?.name || user.displayName || 'Maker'
 
   const tabs = [
-    { id:'projects', label:'My Projects',      count:myProjects.length    },
-    { id:'badges',   label:'Badges',           count:earnedBadges.length  },
-    { id:'rated',    label:'Rated Projects',   count:ratedProjects.length },
-    { id:'settings', label:'Edit Profile',     count:null                 },
+    { id:'projects', label:'My Projects',    count: myProjects.length    },
+    { id:'badges',   label:'Badges',         count: earnedBadges.length  },
+    { id:'rated',    label:'Rated Projects', count: ratedProjects.length },
+    { id:'settings', label:'Edit Profile',   count: null                 },
   ]
 
   return (
@@ -226,7 +262,7 @@ export default function ProfilePage() {
       {/* NAV */}
       <nav style={S.nav}>
         <div style={S.navIn}>
-          <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', flexShrink:0 }}>
+          <a href="/" style={{ fontWeight:800, fontSize:'15px', color:'#dde1f0', flexShrink:0, textDecoration:'none' }}>
             <span style={{ color:'#4a9eff' }}>Assam</span> Innovates
           </a>
           <div className="desk-nav" style={{ display:'flex', gap:'20px', fontSize:'13px', flex:1, justifyContent:'center' }}>
@@ -235,13 +271,11 @@ export default function ProfilePage() {
             ))}
           </div>
           <button onClick={logout} style={{ ...S.btnD, padding:'6px 14px', fontSize:'12px', flexShrink:0 }} className="desk-nav">Sign Out</button>
-          {/* FIX #3 — mobile hamburger */}
           <button className="mob-ham" onClick={() => setMenuOpen(!menuOpen)}
             style={{ display:'none', background:'none', border:'1px solid #2a2f4a', borderRadius:'5px', padding:'6px 10px', cursor:'pointer', color:'#dde1f0', fontSize:'16px', alignItems:'center' }}>
             {menuOpen ? '✕' : '☰'}
           </button>
         </div>
-        {/* FIX #3 — mobile dropdown */}
         {menuOpen && (
           <div style={{ borderTop:'1px solid #2a2f4a', padding:'12px 0', display:'flex', flexDirection:'column', backgroundColor:'#1a1d2e' }}>
             {[['/', 'Home'],['/projects','Projects'],['/forum','Forum'],['/leaderboard','Leaderboard']].map(([href,label]) => (
@@ -257,7 +291,8 @@ export default function ProfilePage() {
         {/* PROFILE HEADER */}
         <div style={{ ...S.card, background:'linear-gradient(135deg,#1a1d2e,#1e2235)' }}>
           <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', flexWrap:'wrap' }}>
-            {/* Avatar with upload hover — FIX #6 */}
+
+            {/* Avatar — click to edit */}
             <div className="photo-wrap" style={{ position:'relative', flexShrink:0, cursor:'pointer' }} onClick={() => setTab('settings')}>
               <div style={{ width:'72px', height:'72px', borderRadius:'50%', background:'linear-gradient(135deg,#4a9eff,#2dd4a0)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px', fontWeight:700, color:'#fff', overflow:'hidden', border:'3px solid #2a2f4a' }}>
                 {displayPhoto
@@ -273,8 +308,16 @@ export default function ProfilePage() {
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', marginBottom:'4px' }}>
                 <div style={{ fontSize:'clamp(18px,4vw,22px)', fontWeight:800 }}>{displayName}</div>
-                {topBadge && <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'99px', backgroundColor:topBadge.bg, color:topBadge.color, border:`1px solid ${topBadge.border}` }}>{topBadge.emoji} {topBadge.label} Maker</span>}
-                {profile?.skillLevel && <span style={{ fontSize:'11px', fontWeight:600, padding:'3px 10px', borderRadius:'99px', backgroundColor:skillColors[profile.skillLevel]?.bg, color:skillColors[profile.skillLevel]?.color }}>{profile.skillLevel}</span>}
+                {topBadge && (
+                  <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'99px', backgroundColor:topBadge.bg, color:topBadge.color, border:`1px solid ${topBadge.border}` }}>
+                    {topBadge.emoji} {topBadge.label} Maker
+                  </span>
+                )}
+                {profile?.skillLevel && (
+                  <span style={{ fontSize:'11px', fontWeight:600, padding:'3px 10px', borderRadius:'99px', backgroundColor:skillColors[profile.skillLevel]?.bg, color:skillColors[profile.skillLevel]?.color }}>
+                    {profile.skillLevel}
+                  </span>
+                )}
               </div>
               <div style={{ fontSize:'13px', color:'#7a82a0', marginBottom:'6px' }}>
                 {user.email}{profile?.town && <span> · 📍 {profile.town}</span>}
@@ -311,7 +354,9 @@ export default function ProfilePage() {
               style={{ flex:1, backgroundColor:'transparent', border:'none', borderBottom:`2px solid ${tab===t.id?'#4a9eff':'transparent'}`, padding:'13px 8px', cursor:'pointer', color:tab===t.id?'#4a9eff':'#7a82a0', fontSize:'clamp(11px,2.5vw,13px)', fontWeight:tab===t.id?600:400, fontFamily:'Inter,system-ui,sans-serif', transition:'color .15s', whiteSpace:'nowrap', minWidth:'80px' }}>
               {t.label}
               {t.count !== null && (
-                <span style={{ marginLeft:'5px', fontSize:'10px', backgroundColor:tab===t.id?'rgba(74,158,255,.15)':'#2a2f4a', color:tab===t.id?'#4a9eff':'#7a82a0', padding:'1px 6px', borderRadius:'99px' }}>{t.count}</span>
+                <span style={{ marginLeft:'5px', fontSize:'10px', backgroundColor:tab===t.id?'rgba(74,158,255,.15)':'#2a2f4a', color:tab===t.id?'#4a9eff':'#7a82a0', padding:'1px 6px', borderRadius:'99px' }}>
+                  {t.count}
+                </span>
               )}
             </button>
           ))}
@@ -319,7 +364,8 @@ export default function ProfilePage() {
 
         {dataLoading ? (
           <div style={{ textAlign:'center', padding:'48px', color:'#7a82a0' }}>
-            <div style={{ fontSize:'28px', marginBottom:'12px' }}>⚡</div><div>Loading your data...</div>
+            <div style={{ fontSize:'28px', marginBottom:'12px' }}>⚡</div>
+            <div>Loading your data...</div>
           </div>
         ) : (
           <>
@@ -352,23 +398,32 @@ export default function ProfilePage() {
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
                               <div style={{ fontWeight:600, fontSize:'14px', color:'#dde1f0' }}>{p.title}</div>
-                              {badge && <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'99px', backgroundColor:badge.bg, color:badge.color, border:`1px solid ${badge.border}` }}>{badge.emoji} {badge.label}</span>}
+                              {badge && (
+                                <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 8px', borderRadius:'99px', backgroundColor:badge.bg, color:badge.color, border:`1px solid ${badge.border}` }}>
+                                  {badge.emoji} {badge.label}
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize:'12px', color:'#7a82a0' }}>
-                              {p.level && <span>{p.level} · </span>}{p.category && <span>{p.category} · </span>}<span>{timeAgo(p.createdAt)}</span>
+                              {p.level && <span>{p.level} · </span>}
+                              {p.category && <span>{p.category} · </span>}
+                              <span>{timeAgo(p.createdAt)}</span>
                             </div>
                           </div>
                           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'6px', flexShrink:0 }}>
                             {p.ratingCount > 0 ? (
                               <div style={{ textAlign:'right' }}>
-                                <div style={{ fontSize:'18px', fontWeight:800, color:p.rating>=8?'#f0a500':p.rating>=6?'#9ba8b5':p.rating>=4?'#cd7f32':'#4a9eff' }}>★ {p.rating.toFixed(1)}</div>
+                                <div style={{ fontSize:'18px', fontWeight:800, color:p.rating>=8?'#f0a500':p.rating>=6?'#9ba8b5':p.rating>=4?'#cd7f32':'#4a9eff' }}>
+                                  ★ {p.rating.toFixed(1)}
+                                </div>
                                 <div style={{ fontSize:'11px', color:'#4a5070' }}>{p.ratingCount} vote{p.ratingCount!==1?'s':''}</div>
                               </div>
                             ) : (
                               <div style={{ fontSize:'12px', color:'#4a5070', textAlign:'right' }}>Not yet<br/>rated</div>
                             )}
-                            {/* FIX #2 — edit button */}
-                            <a href={`/projects/${p.id}/edit`} style={{ fontSize:'11px', color:'#4a9eff', backgroundColor:'rgba(74,158,255,.08)', border:'1px solid rgba(74,158,255,.2)', borderRadius:'4px', padding:'3px 8px', textDecoration:'none', whiteSpace:'nowrap' }}>✏️ Edit</a>
+                            <a href={`/projects/${p.id}/edit`} style={{ fontSize:'11px', color:'#4a9eff', backgroundColor:'rgba(74,158,255,.08)', border:'1px solid rgba(74,158,255,.2)', borderRadius:'4px', padding:'3px 8px', textDecoration:'none', whiteSpace:'nowrap' }}>
+                              ✏️ Edit
+                            </a>
                           </div>
                         </div>
                       )
@@ -462,7 +517,7 @@ export default function ProfilePage() {
               <div style={S.card}>
                 <div style={{ fontSize:'16px', fontWeight:700, marginBottom:'20px' }}>Edit your profile</div>
 
-                {/* FIX #6 — Photo upload */}
+                {/* Profile photo */}
                 <div style={S.field}>
                   <label style={S.label}>Profile photo</label>
                   <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
@@ -477,9 +532,11 @@ export default function ProfilePage() {
                       <label htmlFor="photo-upload" style={{ display:'inline-block', backgroundColor:'#1a1d2e', border:'1px solid #2a2f4a', borderRadius:'6px', padding:'8px 16px', fontSize:'13px', color:'#dde1f0', cursor:'pointer', fontWeight:500 }}>
                         {uploadingPhoto ? '⏳ Uploading...' : '📸 Upload new photo'}
                       </label>
-                      <div style={{ fontSize:'11px', color:'#4a5070', marginTop:'4px' }}>JPG, PNG up to 5MB</div>
-                      {editForm.photoURL && (
-                        <button onClick={() => setEditForm(p=>({...p,photoURL:''}))} style={{ fontSize:'11px', color:'#ff8080', background:'none', border:'none', cursor:'pointer', padding:'4px 0', display:'block' }}>Remove photo</button>
+                      <div style={{ fontSize:'11px', color:'#4a5070', marginTop:'4px' }}>JPG, PNG up to 5MB · or use your Google photo</div>
+                      {editForm.photoURL && editForm.photoURL !== user.photoURL && (
+                        <button onClick={() => setEditForm(p => ({ ...p, photoURL: user.photoURL || '' }))} style={{ fontSize:'11px', color:'#7a82a0', background:'none', border:'none', cursor:'pointer', padding:'4px 0', display:'block', textDecoration:'underline' }}>
+                          Reset to Google photo
+                        </button>
                       )}
                     </div>
                   </div>
@@ -500,7 +557,7 @@ export default function ProfilePage() {
                     <label style={S.label}>Town in Assam</label>
                     <select style={S.select} value={editForm.town} onChange={e=>setEditForm(p=>({...p,town:e.target.value}))}>
                       <option value="">Select town...</option>
-                      {assamTowns.map(t=><option key={t} value={t}>{t}</option>)}
+                      {assamTowns.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>

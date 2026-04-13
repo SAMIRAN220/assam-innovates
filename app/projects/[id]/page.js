@@ -217,6 +217,27 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         )}
+        {project.documents?.filter(d=>d.url).length > 0 && (
+  <div style={S.card}>
+    <div style={S.head}>Project documents</div>
+    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+      {project.documents.filter(d=>d.url).map((d,i) => {
+        const emoji = d.type?.includes('pdf')?'📄':d.type?.includes('presentation')?'📊':d.type?.includes('sheet')?'📈':'📝'
+        return (
+          <a key={i} href={d.url.replace('/raw/upload/', '/raw/upload/fl_attachment/')} target="_blank" rel="noreferrer"
+            style={{ display:'flex', alignItems:'center', gap:'12px', backgroundColor:'#13151f', border:'1px solid #2a2f4a', borderRadius:'8px', padding:'12px 16px', textDecoration:'none' }}>
+            <span style={{ fontSize:'24px' }}>{emoji}</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:'13px', fontWeight:600, color:'#dde1f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.name}</div>
+              <div style={{ fontSize:'11px', color:'#7a82a0' }}>{d.size}</div>
+            </div>
+            <span style={{ fontSize:'12px', color:'#4a9eff', fontWeight:600 }}>Download ↓</span>
+          </a>
+        )
+      })}
+    </div>
+  </div>
+)}
 
         {/* RATING — FIX #4: hide for own project */}
         <div style={S.card}>
